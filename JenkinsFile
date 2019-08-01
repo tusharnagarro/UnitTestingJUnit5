@@ -1,0 +1,42 @@
+node {
+   def mvnHome
+   
+   stage('Preparation') { // for display purposes
+      // Get some code from a GitHub repository
+      git 'https://github.com/tusharnagarro/UnitTestingJUnit5.git'
+      // Get the Maven tool.
+      // ** NOTE: This 'M3' Maven tool must be configured
+      // **       in the global configuration.           
+      mvnHome = tool 'M3'
+   }
+   stage('Build') {
+      // Run the maven build
+      withEnv(["MVN_HOME=$mvnHome"]) {
+         if (isUnix()) {
+            sh '"$MVN_HOME/bin/mvn" clean package'
+         } else {
+            bat(/"%MVN_HOME%\bin\mvn" clean package/)
+         }
+      }
+   }
+   stage('Upload') {
+        // Create an Artifactory server instance, as described above in this article:
+        def server = Artifactory.server('123456789@artifactory')
+        // Create and set an Artifactory Maven Build instance:
+        def buildInfo = Artifactory.newBuildInfo()
+        buildInfo.env.capture = true
+        buildInfo.env.collect()
+        def rtMaven = Artifactory.newMavenBuild()
+        rtMaven.tool = 'M3'
+        rtMaven.deployer server: server, releaseRepo: 'workshop', snapshotRepo: 'workshop'
+        // Optionally include or exclude artifacts to be deployed to Artifactory:
+        rtMaven.deployer.artifactDeploymentPatterns.addInclude("*.jar")
+        
+        // buildInfo = rtMaven.run pom: 'maven-example/pom.xml', goals: 'clean install'
+        // Alternatively, you can pass an existing build-info instance to the run method:
+        rtMaven.run pom: 'pom.xml', goals: 'clean install', buildInfo: buildInfo
+        
+        // Publish the build-info to Artifactory:
+        server.publishBuildInfo buildInfo
+   }
+}
